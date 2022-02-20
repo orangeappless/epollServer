@@ -5,6 +5,13 @@ import sys
 from socket import *
 import threading
 from datetime import datetime
+import time
+import json
+
+
+def export_client_stats(stats):
+    with open("client_stats.json", "a") as file:
+        json.dump(stats, file, indent=2)
 
 
 def client_conn():
@@ -41,40 +48,43 @@ def receive_response(sock):
 
 def create_client(client_name, send_reps):
     c_sock = client_conn()
-    print(f"Client #{client_name} created")
 
     msg = "Hello world"
 
-    if send_reps == 0:
-        while True:
-            send_data(c_sock, msg)
-            receive_response(c_sock)
-            
-            # TODO: TEST BELOW
-            # current_time = datetime.now()
-            # current_time_formatted = current_time.strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]
-            # c_sock.send(f"{current_time_formatted} {msg}".encode("utf-8"))
+    client_stats = {
+        "client_id": client_name,
+        "reqs_made": 0, 
+        "total_sent": 0,
+        "response_time": []
+    }
 
-            # # Receive response from server
-            # response = c_sock.recv(1024)
-            # response_msg = response.decode("utf-8")
-            # # print(f"Server response: {response_msg}")
-    else:
-        for x in range(0, send_reps):
-            send_data(c_sock, msg)
-            receive_response(c_sock)
+    for x in range(1, send_reps+1):
+        # send_data(c_sock, msg)
+        # receive_response(c_sock)
 
-            # TODO: TEST BELOW
-            # current_time = datetime.now()
-            # current_time_formatted = current_time.strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]
-            # c_sock.send(f"{current_time_formatted} {msg}".encode("utf-8"))
+        # TODO: TEST BELOW
+        current_time = datetime.now()
+        current_time_formatted = current_time.strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]
 
-            # # Receive response from server
-            # response = c_sock.recv(1024)
-            # response_msg = response.decode("utf-8")
-            # # print(f"Server response: {response_msg}")
+        payload = f"{current_time_formatted}: {msg}"
+        payload_length = len(payload)
 
-        c_sock.close()
+        t1 = time.perf_counter()
+        c_sock.send(payload.encode("utf-8"))
+
+        client_stats["reqs_made"] += 1
+        client_stats["total_sent"] += payload_length   
+
+        # Receive response from server
+        response = c_sock.recv(1024)
+        t2 = time.perf_counter()
+
+        response_time = f"%.5f" % ((t2-t1)*1000.0)
+        client_stats["response_time"].append(response_time)
+
+    c_sock.close()
+
+    export_client_stats(client_stats)
 
 
 def main():
@@ -87,6 +97,7 @@ def main():
             if sys.argv[1] == "0":
                 while True:
                     threading.Thread(target=create_client, args=(client_num, num_msgs,),).start()
+                    print(f"Client #{client_num} created")
                     client_num += 1
 
             # Specific number of clients
@@ -95,6 +106,7 @@ def main():
 
                 for x in range(client_num, num_clients+1):
                     threading.Thread(target=create_client, args=(x, num_msgs,),).start()
+                    #print(f"Client #{x} created")
         else:
             print("Invalid args: Please provide a number-value (e.g., 1, 2, 3...)")
             print("Usage: python spawn_clients.py [num_clients] [num_msgs]")

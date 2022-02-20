@@ -4,6 +4,18 @@
 from socket import *
 import select
 import queue
+import json
+
+
+def export_server_stats(client_addr, num_reqs, total_data_received):
+    server_stats = {
+        "client_id": client_addr,
+        "num_reqs": num_reqs,
+        "total_received": total_data_received
+    }
+
+    with open("server_stats.json", "a") as file:
+        json.dump(server_stats, file, indent=2)
 
 
 def create_socket():
@@ -37,9 +49,6 @@ def init_connection(server_socket, epoll_obj, conns_list, client_addrs_list, mes
     from_client_list[client_fd] = 0
     to_client_list[client_fd] = 0
 
-    # print(conns_list)
-    # print(client_addrs_list)
-
     # Add data to message queue
     messages_list[client_fd] = queue.Queue()
     print(f"Current number of connections: {len(client_addrs_list)}")
@@ -51,7 +60,7 @@ def handle_data(epoll_obj, fd, conns_list, client_addrs_list, messages_list, cli
     # Handle data and add to queue
     if data:
         client_reqs_list[fd] += 1
-        print(f"Total requests from {client_addrs_list[fd]}: {client_reqs_list[fd]}")
+        # print(f"Total requests from {client_addrs_list[fd]}: {client_reqs_list[fd]}")
 
         messages_list[fd].put(data)
 
@@ -61,21 +70,20 @@ def handle_data(epoll_obj, fd, conns_list, client_addrs_list, messages_list, cli
         total_length = from_client_list[fd] + data_length
         from_client_list[fd] = total_length
 
-        print(f"Total data from {client_addrs_list[fd]}: {from_client_list[fd]}")
+        # print(f"Total data from {client_addrs_list[fd]}: {from_client_list[fd]}")
         # print(f"{client_addrs_list[fd]} sent: {data.decode('utf-8')}")
         epoll_obj.modify(fd, select.EPOLLOUT)
 
     # No data, client disconnect/close
     elif data == "" or data == b"":
         print(f"Client disconnected or closed: {client_addrs_list[fd]}")
+        export_server_stats(client_addrs_list[fd], client_reqs_list[fd], from_client_list[fd])
 
         epoll_obj.unregister(fd)
         conns_list[fd].close()
         del conns_list[fd], client_addrs_list[fd], messages_list[fd], client_reqs_list[fd], from_client_list[fd], to_client_list[fd]
 
         print(f"Current number of connections: {len(client_addrs_list)}")
-        # print(conns_list)
-        # print(client_addrs_list)
 
 
 def send_response(epoll_obj, fd, conns_list, messages_list, to_client_list):
@@ -94,7 +102,7 @@ def send_response(epoll_obj, fd, conns_list, messages_list, to_client_list):
 
         #print(f"Echoing to client: {msg_str}")
         conns_list[fd].send(msg)
-        print(f"Total data to {conns_list[fd].getpeername()}: {to_client_list[fd]}")
+        # print(f"Total data to {conns_list[fd].getpeername()}: {to_client_list[fd]}")
 
 
 def main():
